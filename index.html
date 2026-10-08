@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<style>
+  :root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  html, body { margin: 0; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+<title>Prueba de lectores</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: una columna de herramienta de bodega — zona de lectura arriba, veredicto, resumen y bitácora debajo */
+:root {
+  --bg: #f3f4f1;
+  --surface: #ffffff;
+  --ink: #1d2328;
+  --muted: #5d6870;
+  --line: #d8dcd6;
+  --accent: #b5600f;      /* ámbar de etiqueta de bodega */
+  --accent-soft: #f6e6d3;
+  --good: #2f7a4b;
+  --good-soft: #dff0e4;
+  --warn: #9a6a00;
+  --warn-soft: #f7ecc9;
+  --bad: #b23a2e;
+  --bad-soft: #f6dcd8;
+  --font-ui: "Archivo", "Segoe UI", system-ui, sans-serif;
+  --font-code: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15191c; --surface: #1d2327; --ink: #e7eae6; --muted: #9aa5ac; --line: #313a40;
+    --accent: #e89a4c; --accent-soft: #3a2a1a;
+    --good: #6cc48e; --good-soft: #1d3326; --warn: #e2b94f; --warn-soft: #3a321a; --bad: #ee8576; --bad-soft: #3d2320;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15191c; --surface: #1d2327; --ink: #e7eae6; --muted: #9aa5ac; --line: #313a40;
+  --accent: #e89a4c; --accent-soft: #3a2a1a;
+  --good: #6cc48e; --good-soft: #1d3326; --warn: #e2b94f; --warn-soft: #3a321a; --bad: #ee8576; --bad-soft: #3d2320;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--font-ui); font-size: 15px; line-height: 1.45;
+  padding: 16px; padding-block: 16px 40px;
+}
+main { max-width: 760px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px; }
+h1 { font-size: 1.45rem; font-weight: 700; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h2 { font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0; }
+p { margin: 0; }
+.lead { color: var(--muted); max-width: 62ch; }
+header { display: flex; flex-direction: column; gap: 6px; }
+
+/* Zona de lectura */
+.scan {
+  background: var(--surface); border: 2px solid var(--line); border-radius: 14px;
+  padding: 18px; display: flex; flex-direction: column; gap: 12px; cursor: text;
+  transition: border-color .15s;
+}
+.scan.ready { border-color: var(--accent); }
+.scan-state { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 0.95rem; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex: none; }
+.scan.ready .dot { background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .scan.ready .dot { animation: none; } }
+#code {
+  width: 100%; font-family: var(--font-code); font-size: 1.6rem; font-weight: 500;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--bg); color: var(--ink); letter-spacing: 0.04em;
+}
+#code:focus { outline: 3px solid var(--accent-soft); border-color: var(--accent); }
+.hint { color: var(--muted); font-size: 0.88rem; }
+
+/* Veredicto de la última lectura */
+.last { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.cell {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0;
+}
+.cell .k { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); }
+.cell .v { font-family: var(--font-code); font-size: 1.05rem; font-weight: 600; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-family: var(--font-ui); font-size: 0.85rem; font-weight: 600; width: fit-content; }
+.pill.good { background: var(--good-soft); color: var(--good); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.idle { background: var(--bg); color: var(--muted); }
+.digits b { color: var(--accent); }
+
+/* Ficha de la prueba */
+.setup { display: flex; flex-direction: column; gap: 12px; }
+.fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+label.f { display: flex; flex-direction: column; gap: 4px; font-size: 0.85rem; color: var(--muted); }
+label.f input {
+  font: inherit; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 8px; padding: 9px 10px;
+}
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font: inherit; font-size: 0.88rem; font-weight: 500; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 6px 14px; cursor: pointer;
+}
+.chip[aria-pressed="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--ink); font-weight: 600; }
+.chip:focus-visible, button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.toggle { display: flex; gap: 10px; align-items: flex-start; font-size: 0.9rem; }
+.toggle input { margin-top: 3px; accent-color: var(--accent); width: 18px; height: 18px; flex: none; }
+
+/* Resumen */
+.summary { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+.stat .n { font-family: var(--font-code); font-size: 1.5rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat .l { font-size: 0.8rem; color: var(--muted); }
+.verdicts { display: flex; flex-direction: column; gap: 8px; }
+.verdict { display: flex; gap: 10px; align-items: baseline; }
+.verdict .pill { flex: none; }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.btn {
+  font: inherit; font-weight: 600; border-radius: 10px; padding: 10px 16px; cursor: pointer;
+  border: 1px solid var(--accent); background: var(--accent); color: var(--surface);
+  text-decoration: none; display: inline-flex; align-items: center;
+}
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); }
+.btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.addr { font-family: var(--font-code); user-select: all; color: var(--ink); }
+#copyOut { width: 100%; min-height: 0; font-family: var(--font-code); font-size: 0.8rem; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+.toast { font-size: 0.88rem; color: var(--good); font-weight: 600; }
+
+/* Bitácora */
+.log-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 600; }
+td.code { font-family: var(--font-code); font-variant-numeric: tabular-nums; }
+td.num { font-family: var(--font-code); font-variant-numeric: tabular-nums; text-align: right; }
+th.num { text-align: right; }
+tr.example td { color: var(--muted); font-style: italic; }
+.sample-note { padding: 10px 12px; font-size: 0.85rem; color: var(--muted); }
+footer { color: var(--muted); font-size: 0.82rem; }
+</style>
+
+</head>
+<body>
+<main>
+  <header>
+    <h1>Prueba de lectores de código de barras</h1>
+    <p class="lead">Conecta la pistola al teléfono y escanea etiquetas reales de la tienda o del corner. La página mide si la pistola escribe como teclado, si manda Enter al final y si lee el código completo.</p>
+  </header>
+
+  <section class="setup" aria-labelledby="setupTitle">
+    <h2 id="setupTitle">Datos de la prueba</h2>
+    <div class="fields">
+      <label class="f" for="place">Tienda o corner
+        <input id="place" type="text" placeholder="Ej.: Parque Arauco o PUNTO FAL. Viña" autocomplete="off">
+      </label>
+      <label class="f" for="model">Modelo del lector
+        <input id="model" type="text" placeholder="Ej.: pistola de tienda con adaptador" autocomplete="off">
+      </label>
+    </div>
+    <div class="chips" role="group" aria-label="Cómo está conectado">
+      <button class="chip" type="button" data-conn="Bluetooth" aria-pressed="true">Bluetooth</button>
+      <button class="chip" type="button" data-conn="Cable con adaptador" aria-pressed="false">Cable con adaptador</button>
+      <button class="chip" type="button" data-conn="Otro" aria-pressed="false">Otro</button>
+    </div>
+    <label class="toggle" for="hideKb">
+      <input id="hideKb" type="checkbox" checked>
+      <span>Ocultar el teclado del teléfono mientras escaneo. Desmárcalo si quieres escribir un código a mano para comparar.</span>
+    </label>
+  </section>
+
+  <section class="scan" id="scanZone" aria-labelledby="scanTitle">
+    <div class="scan-state"><span class="dot" aria-hidden="true"></span><span id="scanTitle">Toca aquí y escanea</span></div>
+    <input id="code" type="text" inputmode="none" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Código leído" placeholder="Esperando lectura…">
+    <p class="hint" id="hint">Cada lectura se registra sola. Si la pistola no manda Enter, la página la cierra al medio segundo sin recibir caracteres.</p>
+  </section>
+
+  <section aria-labelledby="lastTitle" style="display:flex;flex-direction:column;gap:10px">
+    <h2 id="lastTitle">Última lectura</h2>
+    <div class="last">
+      <div class="cell"><span class="k">Código</span><span class="v digits" id="lCode">—</span></div>
+      <div class="cell"><span class="k">Tipo</span><span class="v" id="lType"><span class="pill idle">Sin lectura</span></span></div>
+      <div class="cell"><span class="k">Final de la lectura</span><span class="v" id="lEnd"><span class="pill idle">—</span></span></div>
+      <div class="cell"><span class="k">Velocidad</span><span class="v" id="lSpeed"><span class="pill idle">—</span></span></div>
+    </div>
+  </section>
+
+  <section class="summary" aria-labelledby="sumTitle">
+    <h2 id="sumTitle">Resultado de la prueba</h2>
+    <div class="stats">
+      <div class="stat"><div class="n" id="sCount">0</div><div class="l">lecturas</div></div>
+      <div class="stat"><div class="n" id="sEnter">—</div><div class="l">terminan con Enter</div></div>
+      <div class="stat"><div class="n" id="sMs">—</div><div class="l">ms por carácter (promedio)</div></div>
+      <div class="stat"><div class="n" id="sValid">—</div><div class="l">códigos con dígito verificador correcto</div></div>
+    </div>
+    <div class="verdicts" id="verdicts">
+      <div class="verdict"><span class="pill idle">Pendiente</span><span>Escanea al menos 10 etiquetas, y la misma etiqueta 5 veces seguidas, para tener un resultado.</span></div>
+    </div>
+    <div class="actions">
+      <a class="btn" id="mailBtn" href="mailto:maballay@amphora.cl">Enviar por correo</a>
+      <button class="btn ghost" type="button" id="copyBtn">Copiar resultado</button>
+      <button class="btn ghost" type="button" id="resetBtn">Empezar de nuevo</button>
+      <span class="toast" id="toast" role="status" aria-live="polite"></span>
+    </div>
+    <p class="hint">«Enviar por correo» abre tu app de correo con el mensaje listo: revísalo y toca Enviar. Si no se abre, usa «Copiar resultado» y envíalo a <span class="addr">maballay@amphora.cl</span>.</p>
+    <textarea id="copyOut" rows="8" readonly hidden aria-label="Resultado para copiar"></textarea>
+  </section>
+
+  <section aria-labelledby="logTitle" style="display:flex;flex-direction:column;gap:10px">
+    <h2 id="logTitle">Lecturas</h2>
+    <div class="log-wrap">
+      <table>
+        <thead><tr><th>Hora</th><th>Código</th><th class="num">Largo</th><th>Final</th><th class="num">ms/carácter</th><th>Tipo</th></tr></thead>
+        <tbody id="log"></tbody>
+      </table>
+      <p class="sample-note" id="sampleNote">Las filas en cursiva son un ejemplo de cómo se ve una prueba. Desaparecen con tu primera lectura.</p>
+    </div>
+  </section>
+
+  <footer id="device">Dispositivo: detectando…</footer>
+</main>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const input = $('code'), zone = $('scanZone');
+  const IDLE_MS = 500;          // sin Enter: se cierra la lectura tras medio segundo sin caracteres
+  const SCANNER_MS = 35;        // por debajo de esto por carácter, lo escribe un lector y no una persona
+  let reads = [];
+  let current = null;           // { start, last, times: [] }
+  let idleTimer = null;
+  let conn = 'Bluetooth';
+
+  // ---------- Códigos ----------
+  function gtinCheck(code) {
+    if (!/^\d+$/.test(code) || ![8, 12, 13, 14].includes(code.length)) return null;
+    const digits = code.split('').map(Number);
+    const check = digits.pop();
+    let sum = 0;
+    digits.reverse().forEach((d, i) => { sum += d * (i % 2 === 0 ? 3 : 1); });
+    return (10 - (sum % 10)) % 10 === check;
+  }
+  function classify(code) {
+    const ok = gtinCheck(code);
+    const names = { 8: 'EAN-8', 12: 'UPC-A', 13: 'EAN-13', 14: 'GTIN-14' };
+    // Los códigos internos SGI (galga + referencia + talla + color) tienen 12 o 14 dígitos y no son EAN:
+    // con 12 o 14 dígitos solo se trata como GTIN si el dígito verificador calza.
+    const strict = code.length === 13 || code.length === 8;
+    if (ok === true && strict) return { label: names[code.length] + ' válido', cls: 'good', valid: true, gtin: true };
+    if (ok === false && strict) return { label: names[code.length] + ' con dígito verificador incorrecto', cls: 'bad', valid: false, gtin: true };
+    if (ok === true) return { label: names[code.length] + ' válido (o código interno)', cls: 'good', valid: true, gtin: false };
+    if (/^[0-9A-Z]{8,20}$/i.test(code)) return { label: 'Código interno (' + code.length + ' caracteres)', cls: 'warn', valid: null, gtin: false };
+    return { label: 'Formato raro: revisar', cls: 'bad', valid: false, gtin: false };
+  }
+  function digitsHtml(code, t) {
+    const safe = code.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    if (!t.gtin) return safe;
+    return safe.slice(0, -1) + '<b>' + safe.slice(-1) + '</b>';
+  }
+
+  // ---------- Captura ----------
+  function finish(ending) {
+    clearTimeout(idleTimer);
+    const code = input.value.trim();
+    input.value = '';
+    if (!current || !code) { current = null; return; }
+    const times = current.times;
+    const msPerChar = times.length > 1 ? (times[times.length - 1] - times[0]) / (times.length - 1) : null;
+    const t = classify(code);
+    reads.push({ at: new Date(), code, ending, msPerChar, type: t });
+    current = null;
+    render();
+  }
+  input.addEventListener('input', () => {
+    const now = performance.now();
+    if (!current) current = { times: [] };
+    // Puede llegar más de un carácter por evento (algunos teclados del teléfono): se reparte el tiempo.
+    const added = Math.max(1, input.value.length - current.times.length);
+    for (let i = 0; i < added; i++) current.times.push(now);
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => finish('Sin Enter'), IDLE_MS);
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); finish('Enter'); }
+    else if (e.key === 'Tab') { e.preventDefault(); finish('Tab'); }
+  });
+
+  // ---------- Foco ----------
+  function setReady() { zone.classList.toggle('ready', document.activeElement === input); }
+  input.addEventListener('focus', setReady);
+  input.addEventListener('blur', () => {
+    setReady();
+    setTimeout(() => {
+      // Si el foco se fue fuera de la página (el chat, otra pestaña), no se lo quitamos.
+      if (!document.hasFocus()) return;
+      const a = document.activeElement;
+      const busy = a && a !== document.body && a !== input && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA');
+      if (!busy) input.focus({ preventScroll: true });
+    }, 150);
+  });
+  zone.addEventListener('click', () => input.focus());
+  $('hideKb').addEventListener('change', (e) => {
+    input.setAttribute('inputmode', e.target.checked ? 'none' : 'text');
+    input.blur(); input.focus();
+  });
+  document.querySelectorAll('.chip').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.chip').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    conn = b.dataset.conn;
+    updateMail();
+    input.focus();
+  }));
+
+  // Mantener la pantalla encendida durante la prueba, si el teléfono lo permite.
+  try { navigator.wakeLock?.request('screen').catch(() => {}); } catch (_) {}
+
+  // ---------- Pantalla ----------
+  const pill = (cls, text) => '<span class="pill ' + cls + '">' + text + '</span>';
+  const fmtMs = (v) => v == null ? '—' : (v < 10 ? v.toFixed(1) : Math.round(v)).toString();
+  const time = (d) => d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  function speedPill(ms) {
+    if (ms == null) return pill('idle', 'Un solo carácter');
+    return ms <= SCANNER_MS ? pill('good', fmtMs(ms) + ' ms · lector') : pill('warn', fmtMs(ms) + ' ms · parece tecleo');
+  }
+  function endPill(e) { return e === 'Enter' ? pill('good', 'Enter') : e === 'Tab' ? pill('warn', 'Tab') : pill('warn', 'Sin Enter'); }
+
+  function stats() {
+    const n = reads.length;
+    const withEnter = reads.filter((r) => r.ending === 'Enter').length;
+    const speeds = reads.map((r) => r.msPerChar).filter((v) => v != null);
+    const avg = speeds.length ? speeds.reduce((a, b) => a + b, 0) / speeds.length : null;
+    const gtins = reads.filter((r) => r.type.gtin);
+    const validG = gtins.filter((r) => r.type.valid).length;
+    // Consistencia: la misma etiqueta leída varias veces da siempre lo mismo
+    const byPrefix = {};
+    reads.forEach((r) => { const k = r.code.slice(0, 6); (byPrefix[k] = byPrefix[k] || []).push(r.code); });
+    let repeatGroups = 0, repeatBad = 0;
+    Object.values(byPrefix).forEach((codes) => {
+      if (codes.length < 3) return;
+      repeatGroups++;
+      const freq = {}; codes.forEach((c) => freq[c] = (freq[c] || 0) + 1);
+      const top = Math.max(...Object.values(freq));
+      repeatBad += codes.length - top;
+    });
+    return { n, withEnter, avg, gtins: gtins.length, validG, repeatGroups, repeatBad };
+  }
+
+  function verdicts(s) {
+    if (s.n < 3) return [['idle', 'Pendiente', 'Escanea al menos 10 etiquetas, y la misma etiqueta 5 veces seguidas, para tener un resultado.']];
+    const v = [];
+    v.push(s.avg != null && s.avg <= SCANNER_MS
+      ? ['good', 'Teclado', 'La pistola escribe como teclado a ' + fmtMs(s.avg) + ' ms por carácter. Sirve para la app.']
+      : ['bad', 'Teclado', 'Escribe lento (' + fmtMs(s.avg) + ' ms por carácter) o se está tecleando a mano. Revisar la conexión.']);
+    v.push(s.withEnter === s.n
+      ? ['good', 'Enter', 'Todas las lecturas terminan con Enter.']
+      : s.withEnter === 0
+        ? ['warn', 'Enter', 'Ninguna lectura manda Enter. La app puede igual cerrar cada lectura por tiempo, pero conviene configurar la pistola para que agregue Enter.']
+        : ['bad', 'Enter', 'Solo ' + s.withEnter + ' de ' + s.n + ' lecturas terminan con Enter. Revisar la configuración de la pistola.']);
+    if (s.gtins) v.push(s.validG === s.gtins
+      ? ['good', 'Lectura', 'Los ' + s.gtins + ' EAN leídos tienen el dígito verificador correcto.']
+      : ['bad', 'Lectura', (s.gtins - s.validG) + ' de ' + s.gtins + ' EAN tienen el dígito verificador mal: la pistola pierde o cambia caracteres.']);
+    if (s.repeatGroups) v.push(s.repeatBad === 0
+      ? ['good', 'Repetición', 'La misma etiqueta leída varias veces da siempre el mismo código.']
+      : ['bad', 'Repetición', s.repeatBad + ' lecturas repetidas no coinciden con las demás de la misma etiqueta.']);
+    else v.push(['idle', 'Repetición', 'Falta escanear una misma etiqueta 5 veces seguidas.']);
+    return v;
+  }
+
+  function device() {
+    const ua = navigator.userAgent;
+    const os = /iPhone|iPad/.test(ua) ? 'iPhone/iPad' + ((ua.match(/OS (\d+)_/) || [])[1] ? ' (iOS ' + ua.match(/OS (\d+)_/)[1] + ')' : '')
+      : /Android/.test(ua) ? 'Android' + ((ua.match(/Android ([\d.]+)/) || [])[1] ? ' ' + ua.match(/Android ([\d.]+)/)[1] : '')
+      : 'Computador';
+    const model = /Android/.test(ua) ? ((ua.match(/Android [\d.]+; ([^;)]+)/) || [])[1] || '').trim() : '';
+    const browser = /CriOS|Chrome/.test(ua) && !/Edg/.test(ua) ? 'Chrome' : /Safari/.test(ua) && !/Chrome|CriOS/.test(ua) ? 'Safari' : /Firefox|FxiOS/.test(ua) ? 'Firefox' : /Edg/.test(ua) ? 'Edge' : 'Otro navegador';
+    return [os, model && model !== 'K' ? model : '', browser].filter(Boolean).join(' · ');
+  }
+
+  function summaryText(s) {
+    const lines = [
+      'Prueba de lector de códigos (007 inventarios)',
+      'Lugar: ' + ($('place').value.trim() || 'sin indicar'),
+      'Lector: ' + ($('model').value.trim() || 'sin indicar') + ' · ' + conn,
+      'Teléfono: ' + device(),
+      'Lecturas: ' + s.n + ' · con Enter: ' + s.withEnter + ' · ' + fmtMs(s.avg) + ' ms/carácter',
+      'EAN con dígito correcto: ' + s.validG + ' de ' + s.gtins,
+      ...verdicts(s).map(([, k, t]) => '- ' + k + ': ' + t),
+      'Últimos códigos: ' + reads.slice(-5).map((r) => r.code).join(', ')
+    ];
+    return lines.join('\n');
+  }
+
+  function renderLog(rows, example) {
+    $('log').innerHTML = rows.slice().reverse().map((r) =>
+      '<tr' + (example ? ' class="example"' : '') + '><td>' + time(r.at) + '</td><td class="code">' + digitsHtml(r.code, r.type) +
+      '</td><td class="num">' + r.code.length + '</td><td>' + r.ending + '</td><td class="num">' + fmtMs(r.msPerChar) +
+      '</td><td>' + r.type.label + '</td></tr>').join('');
+  }
+
+  function render() {
+    const s = stats();
+    const last = reads[reads.length - 1];
+    if (last) {
+      $('lCode').innerHTML = digitsHtml(last.code, last.type);
+      $('lType').innerHTML = pill(last.type.cls, last.type.label);
+      $('lEnd').innerHTML = endPill(last.ending);
+      $('lSpeed').innerHTML = speedPill(last.msPerChar);
+      $('sampleNote').hidden = true;
+      renderLog(reads, false);
+    }
+    $('sCount').textContent = s.n;
+    $('sEnter').textContent = s.n ? s.withEnter + '/' + s.n : '—';
+    $('sMs').textContent = fmtMs(s.avg);
+    $('sValid').textContent = s.gtins ? s.validG + '/' + s.gtins : '—';
+    $('verdicts').innerHTML = verdicts(s).map(([c, k, t]) => '<div class="verdict">' + pill(c, k) + '<span>' + t + '</span></div>').join('');
+    updateMail();
+  }
+
+  // El enlace de correo se arma con el resultado del momento. El largo se acota
+  // porque algunas apps de correo cortan un mailto muy largo.
+  const MAIL_TO = 'maballay@amphora.cl';
+  function updateMail() {
+    if (!$('mailBtn')) return;   // sin botón de correo dentro del artefacto: el marco no deja abrir mailto
+    const place = $('place').value.trim() || 'sin lugar';
+    const subject = 'Prueba de lector de códigos · ' + place;
+    let body = summaryText(stats());
+    if (body.length > 1800) body = body.slice(0, 1800) + '\n(recortado)';
+    $('mailBtn').href = 'mailto:' + MAIL_TO + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(body);
+  }
+  ['place', 'model'].forEach((id) => $(id).addEventListener('input', updateMail));
+  $('mailBtn')?.addEventListener('click', updateMail);
+
+  // Ejemplo visible hasta la primera lectura real
+  const now = Date.now();
+  const sample = [
+    { code: '7801234567894', ending: 'Enter', msPerChar: 6.2 },
+    { code: '04036428760001', ending: 'Enter', msPerChar: 5.8 },
+    { code: '7801234567894', ending: 'Enter', msPerChar: 6.0 }
+  ].map((r, i) => ({ ...r, at: new Date(now - (3 - i) * 7000), type: classify(r.code) }));
+  renderLog(sample, true);
+
+  $('copyBtn').addEventListener('click', () => {
+    const text = summaryText(stats());
+    const out = $('copyOut');
+    out.value = text;
+    const done = (msg) => { $('toast').textContent = msg; setTimeout(() => $('toast').textContent = '', 3000); };
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(() => { out.hidden = true; done('Copiado. Pégalo en WhatsApp.'); })
+        .catch(() => { out.hidden = false; out.focus(); out.select(); done('Selecciona el texto de abajo y cópialo.'); });
+    } else { out.hidden = false; out.focus(); out.select(); done('Selecciona el texto de abajo y cópialo.'); }
+  });
+  $('resetBtn').addEventListener('click', () => {
+    reads = []; current = null; input.value = '';
+    $('lCode').textContent = '—';
+    $('lType').innerHTML = pill('idle', 'Sin lectura');
+    $('lEnd').innerHTML = pill('idle', '—');
+    $('lSpeed').innerHTML = pill('idle', '—');
+    $('log').innerHTML = '';
+    $('copyOut').hidden = true;
+    render();
+    input.focus();
+  });
+
+  $('device').textContent = 'Teléfono: ' + device();
+  render();
+  // Solo se enfoca al abrir si la página ya tiene el foco; si no, espera a que la toquen.
+  if (document.hasFocus()) input.focus({ preventScroll: true });
+  window.addEventListener('focus', () => {
+    const a = document.activeElement;
+    if (!a || a === document.body) input.focus({ preventScroll: true });
+  });
+  setReady();
+})();
+</script>
+
+</body>
+</html>
